@@ -1,6 +1,8 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { extractJobDetails } from "./aiService.js";
+import { saveToNotion } from "./mcpService.js";
 
 dotenv.config();
 
@@ -10,16 +12,34 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-app.post(`/api/parse-job`, (req, res) => {
+app.post(`/api/parse-job`, async (req, res) => {
     const { text, url } = req.body;
 
-    console.log(`Received job data for URL: ${url}`);
-    console.log(`Text length: ${text?.length ?? 0} characters`);
+    console.log(`\nReceived job data for URL: ${url}`);
 
-    res.json({
-        success: true,
-        message: `Received data for ${url}`,
-    });
+    try {
+        console.log(`Extracting job details with AI...`);
+        const jobDetails = await extractJobDetails(text);
+
+        console.log(`Extracted details:`, jobDetails);
+
+        const jobData = { ...jobDetails, url };
+
+        console.log(`Saving to Notion via MCP...`);
+        await saveToNotion(jobData);
+
+        res.json({
+            success: true,
+            message: `Job saved to Notion: ${jobData.role} at ${jobData.company}`,
+            data: jobData,
+        });
+    } catch (err) {
+        console.error(`Error processing job:`, err);
+        res.status(500).json({
+            success: false,
+            message: `Failed to process job: ${err.message}`,
+        });
+    }
 });
 
 app.listen(PORT, () => {
